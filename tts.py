@@ -192,14 +192,18 @@ def narrate(
             "Re-run with --start-chunk / --end-chunk to regenerate them."
         )
 
-    # Verify all chunks are present before merging
+    # Merge only when all chunks are present; otherwise report what's still needed
     all_wavs = [cache_dir / f"chunk_{i + 1:04d}.wav" for i in range(total)]
     missing = [i + 1 for i, wav in enumerate(all_wavs) if not wav.exists()]
     if missing:
-        raise RuntimeError(
-            f"Missing chunk(s): {missing}. "
-            "Re-run with --start-chunk / --end-chunk to generate them."
+        _log(
+            f"Chunks {range_start}–{range_end} done. "
+            f"Still needed: {missing}. "
+            "Re-run with --start-chunk / --end-chunk to generate them.",
+            verbose=verbose,
+            force=True,
         )
+        return
 
     _log("Merging chunks...", verbose=verbose, force=True)
     _merge_wav_to_mp3(all_wavs, output_path)

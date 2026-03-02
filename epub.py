@@ -56,6 +56,12 @@ def _format_chapter(title: str, body: str) -> str:
     return "\n\n".join(parts)
 
 
+def epub_title(epub_path: Path) -> str:
+    """Return the epub's title metadata, falling back to the filename stem."""
+    book = epub.read_epub(str(epub_path))
+    return (book.title or "").strip() or epub_path.stem
+
+
 def list_chapters(epub_path: Path) -> list[tuple[int, str]]:
     """Return [(number, title), ...] for all chapters in reading order."""
     book = epub.read_epub(str(epub_path))

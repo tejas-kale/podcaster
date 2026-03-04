@@ -147,7 +147,7 @@ def narrate(
     chunks = _chunk_text(text)
     total = len(chunks)
 
-    cache_dir = CACHE_ROOT / _cache_key(text)
+    cache_dir = CACHE_ROOT / _cache_key(text + voice)
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     _log(

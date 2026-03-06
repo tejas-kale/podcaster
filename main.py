@@ -1,6 +1,7 @@
 """CLI for converting epub chapters to narrated MP3."""
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -8,24 +9,17 @@ from typing import Union
 
 import db
 from epub import epub_title, extract_chapter, list_chapters
-from tts import narrate
+from tejas_config import get_secret as _get_secret
+from tts import clean_text, narrate
 
 DEBUG_WORD_LIMIT = 100
 
 
 def _load_env() -> None:
-    """Load key=value pairs from ~/.podcaster/.env into os.environ."""
-    import os
-
-    env_path = Path.home() / ".podcaster" / ".env"
-    if not env_path.exists():
-        return
-    for line in env_path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        os.environ.setdefault(key.strip(), value.strip())
+    """Inject credentials from tejas-config keyring into os.environ."""
+    key = _get_secret("gemini_api_key")
+    if key:
+        os.environ.setdefault("GEMINI_API_KEY", key)
 
 
 def _resolve_epub(query: str) -> Path:
@@ -88,15 +82,23 @@ def _cmd_inspect(args: argparse.Namespace) -> None:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
+    text = chapter.text
+    if args.clean:
+        text = clean_text(text, verbose=args.verbose)
+
     # Text is: title \n\n para1 \n\n para2 ...
-    parts = chapter.text.split("\n\n")
-    first_two = [p for p in parts[1:] if p.strip()][:2]
+    parts = text.split("\n\n")
+    if args.full:
+        content = "\n\n".join(p for p in parts[1:] if p.strip())
+    else:
+        first_two = [p for p in parts[1:] if p.strip()][:2]
+        content = "\n\n".join(first_two)
 
     md = (
         f"# {chapter.title}\n\n"
-        f"**Chapter {chapter.number}** · **{len(chapter.text):,} characters**\n\n"
+        f"**Chapter {chapter.number}** · **{len(text):,} characters**\n\n"
         "---\n\n"
-        + "\n\n".join(first_two)
+        + content
     )
     _render_markdown(md)
 
@@ -117,6 +119,9 @@ def _cmd_create(args: argparse.Namespace) -> None:
     print(f"Chapter: {chapter.title}", file=sys.stderr)
 
     text = chapter.text
+    if args.clean:
+        text = clean_text(text, verbose=args.verbose)
+
     if args.debug:
         words = text.split()[:DEBUG_WORD_LIMIT]
         text = " ".join(words)
@@ -188,8 +193,8 @@ def main() -> None:
             "  3. Registered source name (case-insensitive substring)\n"
             "\n"
             "Credentials:\n"
-            "  Set GEMINI_API_KEY as an environment variable, or place it in\n"
-            "  ~/.podcaster/.env — that file is loaded automatically on every run.\n"
+            "  Set GEMINI_API_KEY as an environment variable, or configure it\n"
+            "  via tejas-config under the 'podcaster' profile.\n"
             "\n"
             "Examples:\n"
             "  podcaster sources add ~/Downloads/book.epub\n"
@@ -210,6 +215,8 @@ def main() -> None:
             "When CHAPTER is given, shows the chapter title, total character count,\n"
             "and the first two paragraphs rendered as markdown (via glow if installed).\n"
             "\n"
+            "Use --full to show the entire chapter text.\n"
+            "\n"
             "EPUB may be a file path, a registered source ID, or a source name substring.\n"
             "Run 'podcaster sources list' to see registered sources."
         ),
@@ -217,6 +224,7 @@ def main() -> None:
             "Examples:\n"
             "  podcaster inspect book.epub             # list all chapters\n"
             "  podcaster inspect book.epub 3           # preview chapter 3\n"
+            "  podcaster inspect book.epub 3 --full    # show entire chapter\n"
             "  podcaster inspect book.epub Intro       # chapter whose title contains 'Intro'\n"
             "  podcaster inspect abc12345              # resolve by source ID\n"
             "  podcaster inspect \"Moby Dick\" 3         # resolve by source name substring\n"
@@ -236,6 +244,22 @@ def main() -> None:
             "Chapter number (1-based spine index) or case-insensitive title substring."
             " Omit to list all chapters."
         ),
+    )
+    inspect.add_argument(
+        "--full",
+        action="store_true",
+        help="Show the entire chapter text instead of just a preview",
+    )
+    inspect.add_argument(
+        "--clean",
+        action="store_true",
+        help="Use Gemini to clean up text formatting (fix joined words, artifacts)",
+    )
+    inspect.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Print debug information to stderr",
     )
 
     # ── create ───────────────────────────────────────────────────────────────
@@ -317,6 +341,11 @@ def main() -> None:
             " Useful for quickly testing voice, API connectivity, or output format"
             " without waiting for a full chapter to render."
         ),
+    )
+    create.add_argument(
+        "--clean",
+        action="store_true",
+        help="Use Gemini to clean up text formatting (fix joined words, artifacts)",
     )
     create.add_argument(
         "-v",

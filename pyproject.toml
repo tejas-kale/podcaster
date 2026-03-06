@@ -9,6 +9,7 @@ dependencies = [
     "pydub>=0.25",
     "ebooklib>=0.18",
     "beautifulsoup4>=4.12",
+    "tejas-config",
 ]
 
 [project.scripts]
@@ -20,3 +21,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 py-modules = ["epub", "tts", "main", "db"]
+
+[tool.uv.sources]
+tejas-config = { path = "../tejas-config" }

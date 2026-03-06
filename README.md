@@ -41,8 +41,14 @@ Commands:
 # List all chapters in an epub
 podcaster inspect book.epub
 
-# Preview a chapter by number
+# Preview a chapter (first two paragraphs)
 podcaster inspect book.epub 3
+
+# Show the entire chapter
+podcaster inspect book.epub 3 --full
+
+# Clean up text formatting using Gemini (fix joined words, artifacts)
+podcaster inspect book.epub 3 --full --clean
 
 # Preview a chapter by title substring (case-insensitive)
 podcaster inspect book.epub "Introduction"
@@ -76,6 +82,9 @@ podcaster create book.epub 3 chapter3.mp3 --start-chunk 5 --end-chunk 10
 
 # Verbose output (shows chunk progress)
 podcaster create book.epub 3 chapter3.mp3 --verbose
+
+# Clean up text formatting using Gemini before narrating
+podcaster create book.epub 3 chapter3.mp3 --clean
 
 # Resolve source by registered ID or name
 podcaster create abc12345 3 chapter3.mp3

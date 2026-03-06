@@ -28,26 +28,62 @@ def _spine_items(book: epub.EpubBook) -> list[epub.EpubItem]:
 
 
 def _parse_html(content: bytes) -> tuple[str, str]:
-    """Parse HTML content into (heading, body_text).
+    """Parse HTML content into (heading, body_markdown).
 
-    Returns the first heading tag's text and all paragraph text joined
-    by double newlines.
+    Extracts the first heading as the title, then converts common
+    HTML tags to markdown.
     """
     soup = BeautifulSoup(content, "html.parser")
 
+    # 1. Extract the first heading for the title
     heading = ""
     heading_tag = soup.find(re.compile(r"^h[1-6]$"))
     if heading_tag:
         heading = heading_tag.get_text(strip=True)
+        # We don't decompose() it yet if we want it in the body markdown too,
+        # but the current logic seems to treat it separately.
+        # Let's decompose it to avoid duplication if it's used as 'title'.
         heading_tag.decompose()
 
-    paragraphs = [
-        p.get_text(strip=True)
-        for p in soup.find_all("p")
-        if p.get_text(strip=True)
-    ]
+    # 2. Convert common inline tags
+    for tag in soup.find_all(["b", "strong"]):
+        tag.replace_with(f"**{tag.get_text()}**")
+    for tag in soup.find_all(["i", "em"]):
+        tag.replace_with(f"*{tag.get_text()}*")
+    for tag in soup.find_all("a"):
+        href = tag.get("href", "")
+        if href:
+            tag.replace_with(f"[{tag.get_text()}]({href})")
+        else:
+            tag.unwrap()
 
-    return heading, "\n\n".join(paragraphs)
+    # 3. Handle block elements
+    # We'll collect all top-level blocks and format them
+    blocks = []
+
+    # Common block tags in EPUBs
+    for tag in soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "blockquote"]):
+        text = tag.get_text(strip=True)
+        if not text:
+            continue
+
+        name = tag.name
+        if name.startswith("h"):
+            level = int(name[1])
+            blocks.append(f"{'#' * level} {text}")
+        elif name == "li":
+            # Simple bullet for list items
+            blocks.append(f"- {text}")
+        elif name == "blockquote":
+            blocks.append(f"> {text}")
+        else:
+            # Paragraphs
+            blocks.append(text)
+
+    body = "\n\n".join(blocks)
+    # Collapse any existing triple+ newlines just in case
+    body = re.sub(r"\n{3,}", "\n\n", body)
+    return heading, body
 
 
 def _format_chapter(title: str, body: str) -> str:

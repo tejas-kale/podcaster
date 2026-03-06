@@ -14,6 +14,7 @@ from pydub import AudioSegment
 CACHE_ROOT = Path.home() / ".podcaster"
 CHUNK_MAX_WORDS = 500
 TTS_MODEL = "gemini-2.5-flash-preview-tts"
+CLEAN_MODEL = "gemini-3-flash-preview"
 
 # Fixed PCM format returned by the Gemini TTS API — do not infer from response
 PCM_CHANNELS = 1
@@ -111,6 +112,36 @@ def _merge_wav_to_mp3(wav_paths: list[Path], output_path: Path) -> None:
     for wav_path in wav_paths:
         audio += AudioSegment.from_wav(str(wav_path))
     audio.export(str(output_path), format="mp3")
+
+
+def clean_text(text: str, *, verbose: bool = False) -> str:
+    """Use Gemini to clean up text formatting (joined words, artifacts) verbatim."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY environment variable not set")
+
+    client = genai.Client(api_key=api_key)
+    _log("Cleaning text with Gemini...", verbose=verbose, force=True)
+
+    prompt = (
+        "The following text was extracted from an EPUB and has some formatting issues "
+        "like joined words (e.g., 'hewould' instead of 'he would') and weird characters. "
+        "Please return the content verbatim but properly formatted. "
+        "Do not change the wording. Do not add any preamble or postamble. "
+        "Use exactly ONE empty line between paragraphs. "
+        "Return ONLY the cleaned text.\n\n"
+        f"TEXT:\n---\n{text}\n---"
+    )
+
+    try:
+        response = client.models.generate_content(
+            model=CLEAN_MODEL,
+            contents=prompt,
+        )
+        return response.text.strip()
+    except Exception as e:
+        _log(f"Warning: Text cleaning failed ({e}). Using raw text.", verbose=verbose, force=True)
+        return text
 
 
 def narrate(
